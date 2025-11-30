@@ -5,11 +5,13 @@ from __future__ import annotations
 import logging
 from collections import deque
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Optional, Set, Tuple
 from urllib.parse import urljoin
 
 import requests
 
+from .clinic_extraction import extract_clinic_from_soup
+from .clinic_models import Clinic
 from .html_utils import parse_html
 from .http_client import HttpRequestError, fetch_html
 from .urls import (
@@ -28,9 +30,10 @@ class CrawlerResult:
     """Summary of a crawl run."""
 
     visited_pages: int
-    visited_urls: set[str]
-    discovered_original_urls: set[str]
-    clinic_candidate_original_urls: set[str]
+    visited_urls: Set[str]
+    discovered_original_urls: Set[str]
+    clinic_candidate_original_urls: Set[str]
+    clinics: Tuple[Clinic, ...]
 
 
 def crawl_our_clinics(
@@ -49,10 +52,11 @@ def crawl_our_clinics(
 
         session = create_session()
 
-    queue = deque([start_url])
-    visited_canonical: set[str] = set()
-    discovered_original: set[str] = set()
-    clinic_candidates: set[str] = set()
+    queue: deque[str] = deque([start_url])
+    visited_canonical: Set[str] = set()
+    discovered_original: Set[str] = set()
+    clinic_candidates: Set[str] = set()
+    clinics_by_key: Dict[Tuple[str, str], Clinic] = {}
     visited_pages = 0
 
     while queue:
@@ -90,6 +94,17 @@ def crawl_our_clinics(
 
         soup = parse_html(html)
 
+        # Attempt clinic detection and extraction for every visited page.
+        clinic = extract_clinic_from_soup(soup, canonical_original)
+        if clinic is not None:
+            key = clinic.dedup_key()
+            existing = clinics_by_key.get(key)
+            if (
+                existing is None
+                or clinic.non_empty_field_count() > existing.non_empty_field_count()
+            ):
+                clinics_by_key[key] = clinic
+
         for link in soup.find_all("a", href=True):
             href = link["href"]
             absolute = urljoin(current, href)
@@ -101,10 +116,11 @@ def crawl_our_clinics(
             queue.append(absolute)
 
     LOG.info(
-        "Visited %d pages; discovered %d in-scope URLs (%d clinic candidates).",
+        "Visited %d pages; discovered %d in-scope URLs (%d clinic candidates, %d clinics extracted).",
         visited_pages,
         len(discovered_original),
         len(clinic_candidates),
+        len(clinics_by_key),
     )
 
     return CrawlerResult(
@@ -112,4 +128,5 @@ def crawl_our_clinics(
         visited_urls=visited_canonical,
         discovered_original_urls=discovered_original,
         clinic_candidate_original_urls=clinic_candidates,
+        clinics=tuple(clinics_by_key.values()),
     )
