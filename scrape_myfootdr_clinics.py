@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Entry point script for the My FootDr archive scraper.
 
-For Sprint 1 this delegates to the CLI module, which fetches a single page and prints its <title>.
+This delegates to the CLI module, which crawls archived 'Our Clinics' pages and prints a deduplicated list of discovered
+URLs.
 """
 
 from myfootdr_scraper.cli import main
