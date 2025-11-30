@@ -2,11 +2,14 @@
 
 For Sprint 2 this crawls archived "Our Clinics" pages via the Wayback Machine and prints a deduplicated list of
 discovered URLs.
+
+From Sprint 3 onward it can also extract clinic records and emit them as JSON.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 from pathlib import Path
 from typing import Optional
@@ -22,7 +25,8 @@ def build_parser() -> argparse.ArgumentParser:
     """Create the top-level argument parser for the CLI."""
     parser = argparse.ArgumentParser(
         description=(
-            "Discover archived My FootDr 'Our Clinics' URLs from the Wayback Machine."
+            "Discover archived My FootDr 'Our Clinics' URLs from the Wayback Machine "
+            "and optionally extract clinic details."
         )
     )
     parser.add_argument(
@@ -41,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Optional path to save the discovered URLs as a newline-"
-            "separated text file."
+            "separated text file. Only used in 'urls' mode."
         ),
     )
     parser.add_argument(
@@ -52,6 +56,15 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Optional maximum number of pages to visit during the crawl "
             "(useful for debugging)."
+        ),
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("urls", "clinics-json"),
+        default="urls",
+        help=(
+            "Output mode: 'urls' (default) prints discovered /our-clinics/ URLs; "
+            "'clinics-json' prints extracted clinic records as JSON."
         ),
     )
     parser.add_argument(
@@ -81,6 +94,20 @@ def save_urls(path: Path, urls: list[str]) -> None:
     LOG.info("Saved %d URLs to %s", len(urls), path)
 
 
+def print_clinics_as_json(clinics) -> None:
+    """Print a list of Clinic instances as JSON to stdout."""
+    from .clinic_models import Clinic  # Local import to avoid cycles in type checking
+
+    data = []
+    for clinic in clinics:
+        if not isinstance(clinic, Clinic):
+            continue
+        data.append(clinic.to_json_dict())
+
+    text = json.dumps(data, indent=2, ensure_ascii=False)
+    print(text)
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     """CLI entry point.
 
@@ -98,18 +125,21 @@ def main(argv: Optional[list[str]] = None) -> int:
         limit=args.limit,
     )
 
-    urls = sorted(result.discovered_original_urls)
-    for url in urls:
-        print(url)
+    if args.mode == "clinics-json":
+        print_clinics_as_json(result.clinics)
+    else:
+        urls = sorted(result.discovered_original_urls)
+        for url in urls:
+            print(url)
 
-    if args.out is not None:
-        save_urls(args.out, urls)
+        if args.out is not None:
+            save_urls(args.out, urls)
 
-    LOG.info(
-        "Finished crawl: %d pages visited, %d unique in-scope URLs (%d clinic candidates).",
-        result.visited_pages,
-        len(result.discovered_original_urls),
-        len(result.clinic_candidate_original_urls),
-    )
+        LOG.info(
+            "Finished crawl: %d pages visited, %d unique in-scope URLs (%d clinic candidates).",
+            result.visited_pages,
+            len(result.discovered_original_urls),
+            len(result.clinic_candidate_original_urls),
+        )
 
     return 0
