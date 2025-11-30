@@ -1,4 +1,4 @@
-"""URL parsing and normalisation helpers for Wayback / My FootDr."""
+"""URL parsing and normalisation helpers for Wayback / My Foot Dr."""
 
 from __future__ import annotations
 
@@ -78,8 +78,10 @@ def is_probable_clinic_url(original_url: str) -> bool:
 
     This distinguishes them from the landing page and region index pages.
     """
+    from urllib.parse import urlsplit as _urlsplit
+
     canonical = canonicalize_original_url(original_url)
-    parts = urlsplit(canonical)
+    parts = _urlsplit(canonical)
     segments = [segment for segment in parts.path.split("/") if segment]
     if not segments:
         return False
