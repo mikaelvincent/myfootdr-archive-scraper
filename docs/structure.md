@@ -1,10 +1,10 @@
-# DOM structure notes (Sprint 1)
+# DOM structure notes for archived clinic pages
 
-These notes summarise initial observations about the archived My FootDr "Our Clinics" pages on the Wayback Machine and guide the extractor design for later sprints.
+These notes summarise observations about the archived My FootDr "Our Clinics" pages on the Wayback Machine and guide the extractor design.
 
 ## 1. Our Clinics landing page
 
-- URL used for Sprint 1:
+- Example "Our Clinics" landing page URL:
 
   - `https://web.archive.org/web/20250708180027/https://www.myfootdr.com.au/our-clinics/`
 
@@ -48,7 +48,7 @@ These notes summarise initial observations about the archived My FootDr "Our Cli
 
 ## 3. Clinic pages
 
-Clinic pages are the ultimate target for data extraction in later sprints.
+Clinic pages are the ultimate target for data extraction.
 
 From manual inspection and the project specification:
 
@@ -62,7 +62,7 @@ From manual inspection and the project specification:
 
 ### Elements to look for
 
-These will be used in later sprints:
+These elements are used when extracting structured clinic data:
 
 - **Clinic name**
 
@@ -100,10 +100,10 @@ These will be used in later sprints:
 
   - `https://web.archive.org/web/<timestamp>/https://www.myfootdr.com.au/our-clinics/...`
 
-- For crawling and filtering later:
+- For crawling and filtering:
 
   - Treat any URL starting with `https://web.archive.org/web/` as already Wayback‑safe.
   - For relative links, rely on `urljoin(current_page_url, href)` so Wayback's rewriting is preserved.
   - When deciding whether to crawl a URL, strip the Wayback prefix and check that the original URL starts with `https://www.myfootdr.com.au/our-clinics/`.
 
-These notes should be refined in later sprints as more clinic pages are explored and concrete HTML fixtures are captured.
+These notes can be refined further as more clinic pages are explored and concrete HTML fixtures are captured.
