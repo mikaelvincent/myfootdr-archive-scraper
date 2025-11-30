@@ -10,7 +10,7 @@ from .fields import extract_address, extract_clinic_name, extract_phone
 def is_clinic_page(soup: BeautifulSoup) -> bool:
     """Return True if the page *soup* looks like a clinic detail page.
 
-    The heuristic is intentionally simple for Sprint 3:
+    The heuristic is intentionally simple:
 
     * We attempt to extract the clinic name, address, and phone number.
     * If at least two of these three fields are present, we treat the page
