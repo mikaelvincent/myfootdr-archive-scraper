@@ -1,6 +1,7 @@
 """Command-line interface for the My FootDr archive scraper.
 
-For Sprint 1 this only fetches a single page and prints its <title>.
+For Sprint 2 this crawls archived "Our Clinics" pages via the Wayback Machine and prints a deduplicated list of
+discovered URLs.
 """
 
 from __future__ import annotations
@@ -11,8 +12,8 @@ from pathlib import Path
 from typing import Optional
 
 from .config import DEFAULT_BASE_URL
-from .http_client import HttpRequestError, create_session, fetch_html
-from .html_utils import extract_title
+from .crawler import crawl_our_clinics
+from .http_client import create_session
 
 LOG = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Create the top-level argument parser for the CLI."""
     parser = argparse.ArgumentParser(
         description=(
-            "Fetch a single My FootDr clinics archive page and " "print its <title>."
+            "Discover archived My FootDr 'Our Clinics' URLs from the Wayback Machine."
         )
     )
     parser.add_argument(
@@ -39,8 +40,18 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         default=None,
         help=(
-            "Optional path to save the raw HTML response. "
-            "Useful when inspecting page structure in early sprints."
+            "Optional path to save the discovered URLs as a newline-"
+            "separated text file."
+        ),
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        metavar="N",
+        default=None,
+        help=(
+            "Optional maximum number of pages to visit during the crawl "
+            "(useful for debugging)."
         ),
     )
     parser.add_argument(
@@ -60,11 +71,14 @@ def configure_logging(debug: bool) -> None:
     )
 
 
-def save_html(html: str, path: Path) -> None:
-    """Write the fetched HTML to a file for later inspection."""
+def save_urls(path: Path, urls: list[str]) -> None:
+    """Write the discovered URLs to a file, one per line."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(html, encoding="utf-8")
-    LOG.info("Saved HTML to %s", path)
+    contents = "\n".join(urls)
+    if contents:
+        contents += "\n"
+    path.write_text(contents, encoding="utf-8")
+    LOG.info("Saved %d URLs to %s", len(urls), path)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -78,16 +92,24 @@ def main(argv: Optional[list[str]] = None) -> int:
     configure_logging(args.debug)
 
     session = create_session()
-    try:
-        html = fetch_html(args.base_url, session=session)
-    except HttpRequestError as exc:
-        LOG.error("Failed to fetch base URL: %s", exc)
-        return 1
+    result = crawl_our_clinics(
+        args.base_url,
+        session=session,
+        limit=args.limit,
+    )
 
-    title = extract_title(html) or "(no title found)"
-    print(title)
+    urls = sorted(result.discovered_original_urls)
+    for url in urls:
+        print(url)
 
     if args.out is not None:
-        save_html(html, args.out)
+        save_urls(args.out, urls)
+
+    LOG.info(
+        "Finished crawl: %d pages visited, %d unique in-scope URLs (%d clinic candidates).",
+        result.visited_pages,
+        len(result.discovered_original_urls),
+        len(result.clinic_candidate_original_urls),
+    )
 
     return 0
