@@ -26,6 +26,27 @@ def extract_original_url(wayback_url: str) -> Optional[str]:
     return match.group(2)
 
 
+def extract_wayback_timestamp(wayback_url: str) -> Optional[int]:
+    """Extract the numeric Wayback timestamp from a capture URL.
+
+    The timestamp is returned as an integer in YYYYMMDDHHMMSS format so that newer captures have larger values. Returns
+    None if *wayback_url* is not a recognised Wayback URL or if a 14-digit timestamp cannot be found.
+    """
+    match = WAYBACK_URL_RE.match(wayback_url)
+    if not match:
+        return None
+
+    raw_timestamp = match.group(1)
+    # Timestamps may include flags such as "id_" or "im_" after the digits.
+    m = re.match(r"(\d{14})", raw_timestamp)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except ValueError:
+        return None
+
+
 def _canonicalize_url(url: str) -> str:
     """Canonicalise a URL for de-duplication.
 
