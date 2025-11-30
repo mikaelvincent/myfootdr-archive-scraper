@@ -76,7 +76,7 @@ python scrape_myfootdr_clinics.py \
   --out data/clinics.json
 ```
 
-#### 3. Clinics as CSV (Sprint 4 output)
+#### 3. Clinics as CSV
 
 Writes clinic records to a CSV file with the exact columns:
 
