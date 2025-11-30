@@ -8,6 +8,7 @@ from myfootdr_scraper.urls import (
     canonicalize_original_url,
     canonicalize_wayback_url,
     extract_original_url,
+    extract_wayback_timestamp,
     is_in_scope_wayback_url,
     is_our_clinics_original_url,
     is_probable_clinic_url,
@@ -31,6 +32,22 @@ class UrlHelpersTestCase(unittest.TestCase):
             "https://www.myfootdr.com.au/our-clinics/noosa/"
         )
         self.assertIsNone(original)
+
+    def test_extract_wayback_timestamp_parses_plain_timestamp(self) -> None:
+        wayback = (
+            "https://web.archive.org/web/20250708180027/"
+            "https://www.myfootdr.com.au/our-clinics/"
+        )
+        timestamp = extract_wayback_timestamp(wayback)
+        self.assertEqual(20250708180027, timestamp)
+
+    def test_extract_wayback_timestamp_ignores_suffixes(self) -> None:
+        wayback = (
+            "https://web.archive.org/web/20250708180027im_/"
+            "https://www.myfootdr.com.au/our-clinics/"
+        )
+        timestamp = extract_wayback_timestamp(wayback)
+        self.assertEqual(20250708180027, timestamp)
 
     def test_is_our_clinics_original_true(self) -> None:
         url = "https://www.myfootdr.com.au/our-clinics/sunshine-coast/noosa/"
