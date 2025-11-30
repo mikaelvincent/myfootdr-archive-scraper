@@ -71,8 +71,7 @@ def is_in_scope_wayback_url(url: str) -> bool:
 def is_probable_clinic_url(original_url: str) -> bool:
     """Heuristic to decide whether an original URL is a clinic page.
 
-    For Sprint 2 we treat URLs with a path depth of at least three segments under /our-clinics/ as clinic candidates,
-    e.g.:
+    URLs with a path depth of at least three segments under /our-clinics/ are treated as clinic candidates, e.g.:
 
     /our-clinics/sunshine-coast/noosa/
 
