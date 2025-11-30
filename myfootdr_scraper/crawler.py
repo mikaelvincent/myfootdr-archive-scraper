@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from collections import deque
 from dataclasses import dataclass
+from heapq import heappop, heappush
 from typing import Dict, Optional, Set, Tuple
 from urllib.parse import urljoin
 
@@ -18,6 +18,7 @@ from .urls import (
     canonicalize_original_url,
     canonicalize_wayback_url,
     extract_original_url,
+    extract_wayback_timestamp,
     is_in_scope_wayback_url,
     is_probable_clinic_url,
 )
@@ -36,35 +37,68 @@ class CrawlerResult:
     clinics: Tuple[Clinic, ...]
 
 
+def _enqueue(
+    queue: list[tuple[int, str]],
+    queued_canonical: Set[str],
+    visited_canonical: Set[str],
+    url: str,
+) -> None:
+    """Add *url* to the priority queue if it has not already been seen.
+
+    URLs are prioritised by their Wayback timestamp so that newer captures are processed before older ones. This helps
+    avoid inefficient loops over many historical snapshots of the same page.
+    """
+    canon = canonicalize_wayback_url(url)
+    if canon in visited_canonical or canon in queued_canonical:
+        return
+
+    timestamp = extract_wayback_timestamp(url) or 0
+    # Use a negative timestamp so that the most recent captures (largest
+    # timestamp) are popped first from the min-heap.
+    priority = -timestamp
+    heappush(queue, (priority, url))
+    queued_canonical.add(canon)
+
+
 def crawl_our_clinics(
     start_url: str,
     *,
     session: Optional[requests.Session] = None,
     limit: Optional[int] = None,
 ) -> CrawlerResult:
-    """Breadth-first crawl from ``start_url`` over archived /our-clinics/ pages.
+    """Crawl from ``start_url`` over archived /our-clinics/ pages.
 
     Only Wayback URLs whose original location lies under
-    ``https://www.myfootdr.com.au/our-clinics/`` are visited.
+    ``https://www.myfootdr.com.au/our-clinics/`` are visited. When multiple
+    Wayback captures of the same content are linked, newer captures are
+    prioritised by the crawler to minimise redundant work.
     """
     if session is None:
         from .http_client import create_session
 
         session = create_session()
 
-    queue: deque[str] = deque([start_url])
+    # Priority queue of ``(priority, url)`` where *priority* is derived from
+    # the negative Wayback timestamp so that newer captures are processed
+    # first.
+    queue: list[tuple[int, str]] = []
     visited_canonical: Set[str] = set()
+    queued_canonical: Set[str] = set()
+
+    _enqueue(queue, queued_canonical, visited_canonical, start_url)
+
     discovered_original: Set[str] = set()
     clinic_candidates: Set[str] = set()
-    clinics_by_key: Dict[Tuple[str, str], Clinic] = {}
+    clinics_by_key: Dict[Tuple[str, str], Tuple[Clinic, int]] = {}
     visited_pages = 0
 
     while queue:
-        current = queue.popleft()
+        _, current = heappop(queue)
         canon_current = canonicalize_wayback_url(current)
         if canon_current in visited_canonical:
             continue
         visited_canonical.add(canon_current)
+        queued_canonical.discard(canon_current)
 
         if not is_in_scope_wayback_url(current):
             LOG.debug("Skipping out-of-scope URL %s", current)
@@ -98,22 +132,25 @@ def crawl_our_clinics(
         clinic = extract_clinic_from_soup(soup, canonical_original)
         if clinic is not None:
             key = clinic.dedup_key()
+            timestamp = extract_wayback_timestamp(current) or 0
             existing = clinics_by_key.get(key)
-            if (
-                existing is None
-                or clinic.non_empty_field_count() > existing.non_empty_field_count()
-            ):
-                clinics_by_key[key] = clinic
+            if existing is None:
+                clinics_by_key[key] = (clinic, timestamp)
+            else:
+                existing_clinic, existing_timestamp = existing
+                new_score = clinic.non_empty_field_count()
+                existing_score = existing_clinic.non_empty_field_count()
+                if new_score > existing_score or (
+                    new_score == existing_score and timestamp > existing_timestamp
+                ):
+                    clinics_by_key[key] = (clinic, timestamp)
 
         for link in soup.find_all("a", href=True):
             href = link["href"]
             absolute = urljoin(current, href)
             if not is_in_scope_wayback_url(absolute):
                 continue
-            canon_link = canonicalize_wayback_url(absolute)
-            if canon_link in visited_canonical:
-                continue
-            queue.append(absolute)
+            _enqueue(queue, queued_canonical, visited_canonical, absolute)
 
     LOG.info(
         "Visited %d pages; discovered %d in-scope URLs (%d clinic candidates, %d clinics extracted).",
@@ -128,5 +165,5 @@ def crawl_our_clinics(
         visited_urls=visited_canonical,
         discovered_original_urls=discovered_original,
         clinic_candidate_original_urls=clinic_candidates,
-        clinics=tuple(clinics_by_key.values()),
+        clinics=tuple(clinic for clinic, _ in clinics_by_key.values()),
     )
